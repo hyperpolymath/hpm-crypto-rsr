@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: MPL-2.0
+# Zig FFI test runner for hpm-crypto-rsr.
+#
+# Currently set to `workflow_dispatch` only — manually triggered, NEVER
+# fires on push/PR. This is deliberate: the estate is on a tight
+# GitHub Actions budget (2026-05-27). When credits are restored, swap
+# `on:` to:
+#
+#   on:
+#     push:
+#       branches: [main]
+#       paths:
+#         - 'ffi/zig/**'
+#         - '.github/workflows/zig-test.yml'
+#     pull_request:
+#       paths:
+#         - 'ffi/zig/**'
+#         - '.github/workflows/zig-test.yml'
+#
+# The path filter is mandatory per the estate's budget-rebalancing plan
+# (see oikos PR thread, 2026-05-27 GH Actions budget item).
+
+name: zig-build-test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Zig 0.15.2
+        uses: mlugg/setup-zig@a67e68dc5c8281d9608136d3d7ca1b282213e4ac # v1.2.1
+        with:
+          version: 0.15.2
+
+      - name: zig build
+        working-directory: ffi/zig
+        run: zig build
+
+      - name: zig build test
+        working-directory: ffi/zig
+        run: zig build test --summary all
