@@ -1,0 +1,14 @@
+-- SPDX-License-Identifier: MPL-2.0
+package hpm-crypto-rsr
+version = 0.1.0
+
+authors = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
+license = "MPL-2.0"
+brief = "HMAC-SHA256 + RS256 + base64url crypto primitives (Idris2 ABI + Zig FFI)"
+readme = "README.adoc"
+sourcedir = "src"
+
+modules =
+    HpmCrypto.ABI.Types,
+    HpmCrypto.ABI.Layout,
+    HpmCrypto.ABI.Foreign

@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: MPL-2.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+= hpm-crypto-rsr — Roadmap
+v0.1.0-dev, 2026-05-27
+:toc: left
+:toclevels: 2
+
+Status legend: `done` · `in-progress` · `blocked` · `planned`
+
+== v0.1 — Webhook verification + base64url (current)
+
+*Status: done in scaffold, awaiting CI / packaging.*
+
+* [x] RSR layout (src/abi/, ffi/zig/, generated/abi/, ABI-FFI-README.md)
+* [x] Idris2 ABI: Types, Layout (size proofs), Foreign (%foreign decls + safe wrappers)
+* [x] Zig FFI: `hpm_crypto_hmac_sha256_verify` (constant-time via `std.crypto.timing_safe.eql`)
+* [x] Zig FFI: `hpm_crypto_base64url_encode` / `hpm_crypto_base64url_decode` (no padding)
+* [x] 16/16 Zig tests pass (incl. RFC 4231 KAT, JWT-header fixture, alphabet rewrites,
+  malformed-input fail-closed)
+* [ ] Generated C header `generated/abi/hpm_crypto.h` (hand-written until an Idris2 → C
+  header pass exists; the contract is fully specified in `ABI-FFI-README.md`)
+* [ ] CI: `zig build test` on every PR
+* [ ] First downstream consumer wired (AffineScript `stdlib/Crypto.affine` externs
+  pointing at the C ABI)
+
+== v0.2 — RS256 sign + verify
+
+*Status: planned.* Zig 0.15 has no public RSA signing path; this is the decision
+point.
+
+=== Implementation options
+
+[cols="1,3,3", options="header"]
+|===
+| Option | Approach | Trade-off
+
+| (a) Hand-rolled | RSASSA-PKCS1-v1_5 on top of `std.crypto.hash.sha2` +
+  `std.math.big.int` | ~300 LoC, no dependencies, fully reviewable. Risk: getting
+  the PKCS#1 padding right on first attempt (timing-channel risk on padding
+  oracle is small for a signing path but real for verification).
+
+| (b) Vendored Zig RSA lib | Pull a known-good RSA implementation (e.g.
+  zig-crypto, libsodium-bind) | Fewer LoC to maintain in this repo; introduces an
+  upstream dependency that needs vetting + tracking.
+
+| (c) Link OpenSSL / BoringSSL | `@cImport` `openssl/rsa.h` and call `RSA_sign` | Operationally simple;
+  defeats the "drop-in `.so`" goal because consumers now need OpenSSL on the
+  target. Rejected unless (a) and (b) both fail.
+|===
+
+*Leaning: (a).* Padding is fixed-shape (`0x00 0x01 [0xFF...] 0x00 [DigestInfo]`),
+the SHA-256 DigestInfo is a known constant byte string, and modular exponentiation
+via `std.math.big.int.Managed` is straightforward.
+
+=== v0.2 deliverables
+
+* [ ] PKCS#8 PEM parser (decode header/footer, base64 body, DER ASN.1 of `PrivateKeyInfo`)
+* [ ] `hpm_crypto_rs256_sign` implementation
+* [ ] `hpm_crypto_rs256_verify` (matching surface for completeness)
+* [ ] Test fixtures: RFC 8017 test vectors + a real GitHub-App-PEM smoke
+* [ ] Idris2 wrapper updates to remove the "not implemented" stub
+
+== v0.3 — Cross-language consumer demos
+
+*Status: planned.* Proves the "any language via C ABI" claim with real consumers.
+
+* [ ] `examples/affinescript-consumer.affine` — minimal webhook verifier in
+  AffineScript calling into `libhpm_crypto.so` via extern fn
+* [ ] `examples/rust-consumer/` — same in Rust via bindgen
+* [ ] `examples/idris2-consumer/` — same in Idris2 via the package modules
+* [ ] AffineScript stdlib PR: replace the inline-JS `stdlib/Crypto.affine`
+  externs with calls into `hpm-crypto-rsr` (closes the loop on the closed
+  affinescript #408)
+
+== v0.4 — Hardening
+
+*Status: planned.*
+
+* [ ] `cargo audit`-equivalent: dependency scanning (`zig-out` artefacts +
+  `std.crypto` version pinning)
+* [ ] Differential testing against OpenSSL on RFC vectors (RS256, HMAC)
+* [ ] Side-channel guard: timing histograms for HMAC verify across known
+  match / known mismatch / random / null-pointer paths
+* [ ] OpenSSF Scorecard ≥ 7
+* [ ] SLSA Level 3 build provenance for `libhpm_crypto.so`
+
+== v1.0 — Stable
+
+* [ ] All of v0.1 → v0.4 shipped
+* [ ] Used in production by OikosBot (https://github.com/hyperpolymath/oikos[oikos])
+* [ ] Consumed by at least one other estate service
+* [ ] API surface frozen; semver kicks in
