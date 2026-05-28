@@ -26,26 +26,28 @@ toc::[]
 
 == Status
 
-`0.1.0-dev` — *scaffold + HMAC-SHA256 + base64url working;
-RS256 declared but not yet implemented.*
+`0.2.0-dev` — *HMAC-SHA256, base64url, and RS256 sign+verify all working
+(23/23 Zig tests passing, KAT against OpenSSL).*
 
 [cols="1,2"]
 |===
 | Primitive | Status
 
 | HMAC-SHA256 verify
-| ✅ Implemented (Zig `std.crypto.auth.hmac.sha2.HmacSha256`)
+| Implemented (Zig `std.crypto.auth.hmac.sha2.HmacSha256`)
 
 | base64url encode / decode
-| ✅ Implemented (hand-rolled, no Zig std dep)
+| Implemented (hand-rolled, no Zig std dep)
 
-| RS256 sign (RSASSA-PKCS1-v1_5 over SHA-256)
-| 🚧 Idris2 ABI declared; Zig implementation TODO (Zig std exposes RSA
-  for cert verification but not signing — needs either a third-party Zig
-  RSA lib or a hand-rolled implementation on top of std bignum)
+| RS256 sign (RSASSA-PKCS1-v1_5 over SHA-256, RSA-2048)
+| Implemented (hand-rolled on top of `std.crypto.ff.Modulus(2048)` — no
+  external dependency, no allocator dependency). Accepts PKCS#8 unencrypted
+  PEM only.
 
 | RS256 verify
-| 🚧 Same blocker as sign
+| Implemented. Takes raw `(n, e)` public-key components rather than a PEM —
+  verifier-side callers should already have a parsed key from upstream
+  JWKS / SPKI discovery.
 |===
 
 See link:ROADMAP.adoc[ROADMAP.adoc] for the path to v0.1 (HMAC + base64url

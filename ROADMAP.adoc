@@ -25,40 +25,49 @@ Status legend: `done` · `in-progress` · `blocked` · `planned`
 
 == v0.2 — RS256 sign + verify
 
-*Status: planned.* Zig 0.15 has no public RSA signing path; this is the decision
-point.
+*Status: done in scaffold; awaiting CI / packaging.* Implementation
+landed via option (a) (hand-rolled on top of `std.crypto.ff`, no
+dependencies). Total RS256 code surface ≈ 250 LoC.
 
-=== Implementation options
+=== Implementation choice
 
-[cols="1,3,3", options="header"]
-|===
-| Option | Approach | Trade-off
+Option (a) won. Zig 0.15.2's `std.crypto.ff` provides `Modulus(bits)` with
+Montgomery `powWithEncodedExponent` (constant-time, secret-exponent path) +
+`powWithEncodedPublicExponent` (faster, public-exponent path) — the hard
+part of RSA is already there as a finite-field primitive. What we added on
+top:
 
-| (a) Hand-rolled | RSASSA-PKCS1-v1_5 on top of `std.crypto.hash.sha2` +
-  `std.math.big.int` | ~300 LoC, no dependencies, fully reviewable. Risk: getting
-  the PKCS#1 padding right on first attempt (timing-channel risk on padding
-  oracle is small for a signing path but real for verification).
+* PKCS#8 unencrypted PEM parser (standard-base64 decode + ASN.1 DER walker;
+  rejects PKCS#1 PEMs at the boundary so the consumer is forced to pass
+  `openssl pkcs8 -topk8` output).
+* PKCS#1 v1.5 padding builder for SHA-256 (RFC 8017 §9.2, fixed-shape).
+* `hpm_crypto_rs256_sign` wired to `pow` (secret exponent).
+* `hpm_crypto_rs256_verify` wired to `powPublic` (public exponent), takes
+  raw `(n, e)` bytes rather than a PEM (verifier-side callers already
+  have a parsed key from upstream JWKS / SPKI discovery).
 
-| (b) Vendored Zig RSA lib | Pull a known-good RSA implementation (e.g.
-  zig-crypto, libsodium-bind) | Fewer LoC to maintain in this repo; introduces an
-  upstream dependency that needs vetting + tracking.
-
-| (c) Link OpenSSL / BoringSSL | `@cImport` `openssl/rsa.h` and call `RSA_sign` | Operationally simple;
-  defeats the "drop-in `.so`" goal because consumers now need OpenSSL on the
-  target. Rejected unless (a) and (b) both fail.
-|===
-
-*Leaning: (a).* Padding is fixed-shape (`0x00 0x01 [0xFF...] 0x00 [DigestInfo]`),
-the SHA-256 DigestInfo is a known constant byte string, and modular exponentiation
-via `std.math.big.int.Managed` is straightforward.
+Supported key size: **RSA-2048 only** — `Modulus(bits)` is comptime, so
+other sizes (3072 / 4096) need their own instantiation. Tracked for
+v0.2.1.
 
 === v0.2 deliverables
 
-* [ ] PKCS#8 PEM parser (decode header/footer, base64 body, DER ASN.1 of `PrivateKeyInfo`)
-* [ ] `hpm_crypto_rs256_sign` implementation
-* [ ] `hpm_crypto_rs256_verify` (matching surface for completeness)
-* [ ] Test fixtures: RFC 8017 test vectors + a real GitHub-App-PEM smoke
-* [ ] Idris2 wrapper updates to remove the "not implemented" stub
+* [x] Standard-base64 (RFC 4648 §4) lenient decoder for PEM bodies
+* [x] ASN.1 DER walker (SEQUENCE / INTEGER / OCTET STRING; short + long-form length)
+* [x] PKCS#8 unencrypted PEM parser (extracts `n`, `e`, `d`)
+* [x] PKCS#1 v1.5 padding builder for SHA-256
+* [x] `hpm_crypto_rs256_sign` (RSA-2048)
+* [x] `hpm_crypto_rs256_verify` (RSA-2048; takes raw `n`, `e`)
+* [x] KAT test against an OpenSSL-generated signature (`echo -n "hello world" |
+  openssl dgst -sha256 -sign test.pem`)
+* [x] Round-trip + deterministic-output + altered-message + wrong-sig-length
+  + malformed-PEM + size-query test coverage
+* [x] Idris2 wrapper updates: `rs256Sign` no longer carries a "not
+  implemented" warning; `rs256Verify` added
+* [ ] Generated C header `generated/abi/hpm_crypto.h` (rolling deliverable
+  from v0.1)
+* [ ] First downstream consumer wired (AffineScript `stdlib/Crypto.affine`
+  externs)
 
 == v0.3 — Cross-language consumer demos
 

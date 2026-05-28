@@ -102,20 +102,23 @@ base64UrlDecode in_ inLen out outCap = do
   pure (b64uResultFromInt rc)
 
 --------------------------------------------------------------------------------
--- RS256 sign (declared; Zig implementation TODO — see ROADMAP.adoc)
+-- RS256 sign / verify (RSASSA-PKCS1-v1_5 over SHA-256, RSA-2048)
 --------------------------------------------------------------------------------
 
-||| Planned. Once implemented in Zig:
+||| Raw C call.
 |||
 |||   ssize_t hpm_crypto_rs256_sign(
 |||       const uint8_t* pkcs8_pem_ptr, size_t pkcs8_pem_len,
 |||       const uint8_t* msg_ptr,       size_t msg_len,
 |||       uint8_t* sig_out,             size_t sig_cap);
 |||
-||| Until the Zig side lands, calling this aborts with a clear error.
+||| Returns 256 on success (signature written), 256 on size-query
+||| (sig_out null / sig_cap < 256), -1 on any error.
 %foreign "C:hpm_crypto_rs256_sign, libhpm_crypto"
 prim__rs256Sign : Buffer -> Int -> Buffer -> Int -> Buffer -> Int -> PrimIO Int
 
+||| Sign `msg` under the RSA-2048 PKCS#8 PEM in `pkcs8Pem`. `sigOut`
+||| must have capacity ≥ 256 (= `Rs256_2048_SigLen`).
 export
 rs256Sign :
      (pkcs8Pem : Buffer)
@@ -128,3 +131,33 @@ rs256Sign :
 rs256Sign pem pLen msg mLen out cap = do
   rc <- primIO $ prim__rs256Sign pem pLen msg mLen out cap
   pure (b64uResultFromInt rc)
+
+||| Raw C call.
+|||
+|||   int hpm_crypto_rs256_verify(
+|||       const uint8_t* n_ptr,   size_t n_len,
+|||       const uint8_t* e_ptr,   size_t e_len,
+|||       const uint8_t* msg_ptr, size_t msg_len,
+|||       const uint8_t* sig_ptr, size_t sig_len);
+|||
+||| Returns 1 on match, 0 on mismatch (including any length/null-pointer
+||| failure). Verify takes raw public-key components (n, e) rather than a
+||| PEM — verifier-side callers should already have a parsed key from
+||| upstream JWKS / SPKI discovery.
+%foreign "C:hpm_crypto_rs256_verify, libhpm_crypto"
+prim__rs256Verify : Buffer -> Int -> Buffer -> Int -> Buffer -> Int -> Buffer -> Int -> PrimIO Int
+
+export
+rs256Verify :
+     (n : Buffer)
+  -> (nLen : Int)
+  -> (e : Buffer)
+  -> (eLen : Int)
+  -> (msg : Buffer)
+  -> (msgLen : Int)
+  -> (sig : Buffer)
+  -> (sigLen : Int)
+  -> IO HmacResult
+rs256Verify n nLen e eLen msg mLen sig sigLen = do
+  rc <- primIO $ prim__rs256Verify n nLen e eLen msg mLen sig sigLen
+  pure (hmacResultFromInt rc)
