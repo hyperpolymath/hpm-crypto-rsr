@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MPL-2.0
+-- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 ||| hpm-crypto-rsr — type declarations for the FFI boundary.
 |||
 ||| Every type that crosses the C ABI is declared here so the Idris2

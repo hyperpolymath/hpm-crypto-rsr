@@ -1,3 +1,5 @@
+-- SPDX-License-Identifier: MPL-2.0
+-- Copyright (c) Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 ||| hpm-crypto-rsr — %foreign declarations binding into libhpm_crypto.so.
 |||
 ||| Every external Zig export gets a private `prim__*` `%foreign`
