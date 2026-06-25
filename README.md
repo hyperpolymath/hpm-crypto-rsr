@@ -1,0 +1,131 @@
+<!--
+SPDX-License-Identifier: CC-BY-SA-4.0
+SPDX-FileCopyrightText: 2025-2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+-->
+
+Jonathan D.A. Jewell \<[j.d.a.jewell@open.ac](j.d.a.jewell@open.ac).uk\>
+v0.1.0-dev, 2026-05-27 :toc: macro :toclevels: 2 :icons: font
+
+**Crypto primitives for GitHub-style webhook signature verification and
+RS256 JWT signing, in the Hyperpolymath RSR Standard (Idris2 ABI + Zig
+FFI).**
+
+Sister of [stapeln](https://github.com/hyperpolymath/stapeln), which
+owns Ed25519 + SHA-256. This library owns HMAC-SHA256, RSASSA-PKCS1-v1_5
+(a.k.a. RS256), and base64url — the surface the OikosBot (and any future
+GitHub App / OAuth2 / webhook receiver in the estate) needs.
+
+> HMAC-SHA256 + RS256 + base64url is the irreducible kernel of every
+> GitHub App. Anything less, and your bot is doing inline JS or shelling
+> out to OpenSSL.
+
+<div id="toc">
+
+</div>
+
+# Status
+
+`0.2.0-dev` — **HMAC-SHA256, base64url, and RS256 sign+verify all
+working (23/23 Zig tests passing, KAT against OpenSSL).**
+
+| Primitive | Status |
+|----|----|
+| HMAC-SHA256 verify | Implemented (Zig `std.crypto.auth.hmac.sha2.HmacSha256`) |
+| base64url encode / decode | Implemented (hand-rolled, no Zig std dep) |
+| RS256 sign (RSASSA-PKCS1-v1_5 over SHA-256, RSA-2048) | Implemented (hand-rolled on top of `std.crypto.ff.Modulus(2048)` — no external dependency, no allocator dependency). Accepts PKCS#8 unencrypted PEM only. |
+| RS256 verify | Implemented. Takes raw `(n,` `e)` public-key components rather than a PEM — verifier-side callers should already have a parsed key from upstream JWKS / SPKI discovery. |
+
+See <a href="ROADMAP.adoc" class="adoc">ROADMAP</a> for the path to v0.1
+(HMAC + base64url shipped) and v0.2 (RS256 sign + verify).
+
+# Motivation
+
+The OikosBot port from ReScript to AffineScript (tracked in
+[oikos](https://github.com/hyperpolymath/oikos) PR thread) requires:
+
+1.  Verifying GitHub’s `X-Hub-Signature-256` header on every webhook.
+
+2.  Signing JWTs to exchange for GitHub App installation tokens.
+
+3.  base64url for JWT header/payload/signature assembly.
+
+The original port plan was to add these as inline JavaScript shims to
+AffineScript’s `stdlib/Crypto.affine`. That approach was rejected in
+favour of the Hyperpolymath RSR Standard: Idris2 ABI + Zig FFI + C ABI,
+so the same surface can be consumed from AffineScript, Rust, Idris2, and
+any other estate language.
+
+See <a href="ABI-FFI-README.md" class="md">ABI-FFI-README</a> for the
+RSR pattern.
+
+# Architecture
+
+    ┌─────────────────────────────────────────────┐
+    │  Idris2 ABI                                 │
+    │  src/abi/                                   │
+    │  - Types.idr      Type declarations         │
+    │  - Layout.idr     Memory layout proofs      │
+    │  - Foreign.idr    %foreign declarations     │
+    └─────────────────┬───────────────────────────┘
+                      │
+                      │ generates (compile time)
+                      ▼
+    ┌─────────────────────────────────────────────┐
+    │  C headers                                  │
+    │  generated/abi/hpm_crypto.h                 │
+    └─────────────────┬───────────────────────────┘
+                      │
+                      │ imported by
+                      ▼
+    ┌─────────────────────────────────────────────┐
+    │  Zig FFI                                    │
+    │  ffi/zig/src/main.zig                       │
+    │  - export fn hpm_crypto_hmac_sha256_verify  │
+    │  - export fn hpm_crypto_base64url_encode    │
+    │  - export fn hpm_crypto_base64url_decode    │
+    │  - export fn hpm_crypto_rs256_sign     (TODO)│
+    │  - export fn hpm_crypto_rs256_verify   (TODO)│
+    └─────────────────┬───────────────────────────┘
+                      │
+                      │ compiles to
+                      ▼
+                    libhpm_crypto.so
+                    consumed via stable C ABI by:
+                      - AffineScript (stdlib/Crypto.affine externs)
+                      - Rust (bindgen / hand-written)
+                      - Idris2 (this repo)
+                      - any other language
+
+# Build
+
+```shell
+# Zig FFI library
+cd ffi/zig
+zig build           # builds libhpm_crypto.so + .a
+zig build test      # runs Zig-side test suite
+
+# Idris2 ABI module (consumes the .so above)
+cd src
+idris2 --build hpm-crypto-rsr.ipkg
+```
+
+# Consuming from AffineScript
+
+Once `libhpm_crypto.so` is built and discoverable on the system library
+path, AffineScript’s `stdlib/Crypto.affine` declares externs that lower
+to direct C-ABI calls (no JavaScript bridge):
+
+```affinescript
+extern fn hpm_crypto_hmac_sha256_verify(
+  secret_ptr: Bytes, secret_len: Int,
+  body_ptr: Bytes, body_len: Int,
+  sig_ptr: Bytes, sig_len: Int
+) -> Int;
+```
+
+See `examples/affinescript-consumer.affine` (TODO) for the canonical
+binding pattern.
+
+# Licence
+
+MPL-2.0. See [LICENSE](LICENSE).
